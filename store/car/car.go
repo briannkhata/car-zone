@@ -62,10 +62,10 @@ func (s Store) GetCarByBrand(ctx context.Context, brand string, isEngine bool) (
 		query = `SELECT c.id,c.name,c.year,c.brand,c.fuel_type,c.engine_id,c.price,c.created_at,c.updated_at,e.id,e.displacement,e.no_of_cyclinders,e.car_range FROM car c LEFT
 	JOIN engine e ON c.engine_id = e.id WHERE c.brand=$1`
 	} else {
-		query = `SELECT id,name,year,brand,fuel_type,engine_id,price,created_at,updated_at WHERE brand=$1`
+		query = `SELECT id,name,year,brand,fuel_type,engine_id,price,created_at,updated_at FROM car WHERE brand=$1`
 	}
 
-	rows, err := s.db.QueryRowContext(ctx, query, brand)
+	rows, err := s.db.QueryContext(ctx, query, brand)
 
 	if err != nil {
 		return nil, err
@@ -204,8 +204,6 @@ func (s Store) CreateCar(ctx context.Context, carReq *models.CarRequest) (models
 
 func (s Store) UpdateCar(ctx context.Context, id string, carReq *models.CarRequest) (models.Car, error) {
 	var updatedCar models.Car
-	//var engineID uuid.UUID
-
 	tx, err := s.db.BeginTx(ctx, nil)
 
 	if err != nil {
@@ -253,5 +251,57 @@ func (s Store) UpdateCar(ctx context.Context, id string, carReq *models.CarReque
 }
 
 func (s Store) DeleteCar(ctx context.Context, id string) (models.Car, error) {
+	var deletedCar models.Car
+	tx, err := s.db.BeginTx(ctx, nil)
+
+	if err != nil {
+		return deletedCar, err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+			return
+		}
+		err = tx.Commit()
+	}()
+
+	checkIdRecord := `SELECT id,name,year,brand,fuel_type,engine_id,price,created_at,updated_at FROM car WHERE id=$1`
+
+	tx.QueryRowContext(ctx, checkIdRecord, id).Scan(
+		&deletedCar.ID,
+		&deletedCar.Name,
+		&deletedCar.Year,
+		&deletedCar.Brand,
+		&deletedCar.FuelType,
+		&deletedCar.Engine.EngineID,
+		&deletedCar.Price,
+		&deletedCar.CreatedAt,
+		&deletedCar.UpdatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return models.Car{}, errors.New("Car not Found")
+		}
+		return models.Car{}, err
+	}
+
+	deleteRecord := `DELETE FROM car WHERE id=$1`
+
+	result, err := tx.ExecContext(ctx, deleteRecord, id)
+	if err != nil {
+		return models.Car{}, err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return models.Car{}, err
+	}
+
+	if rowsAffected == 0 {
+		return models.Car{}, errors.New("no rows were deleted")
+	}
+
+	return deletedCar, nil
 
 }
