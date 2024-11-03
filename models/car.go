@@ -29,7 +29,7 @@ type CarRequest struct {
 	Price    float64 `json:"price"`
 }
 
-func ValidateRequest(carReq CarRequest) error {
+func ValidateCarRequest(carReq CarRequest) error {
 	if err := validateName(carReq.Name); err != nil {
 		return err
 	}
